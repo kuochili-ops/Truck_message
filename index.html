@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 奔馳貨櫃車模擬器 - 尾門完美裁切版</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        
+        /* 雙側操控分頁標籤 */
+        .tab-container {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 8px;
+            background: #2a2a2a;
+            color: #888;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .tab-btn.active {
+            background: #007bff;
+            color: #fff;
+            border-color: #007bff;
+        }
+
+        /* 操控介面面板 */
+        #ui-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 92%;
+            max-width: 500px;
+            background: rgba(20, 20, 20, 0.9);
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 10;
+        }
+        
+        .panel-content {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .panel-content.active {
+            display: flex;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #2a2a2a;
+            color: #fff;
+            font-size: 15px;
+            outline: none;
+        }
+        input[type="text"]:focus {
+            border-color: #007bff;
+        }
+        
+        /* 顏色選擇器樣式 */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            cursor: pointer;
+            background: none;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ccc;
+            font-size: 13px;
+        }
+        .control-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
+        input[type="range"] {
+            flex: 1;
+            accent-color: #007bff;
+        }
+        .hint-text {
+            font-size: 11px;
+            color: #ffaa00;
+            margin-top: -4px;
+        }
+        
+        /* 隱藏用於材質的 Canvas */
+        .hidden-canvas {
+            display: none;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            pointer-events: none;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="loading">正在下載並等比例裁切尾門貼圖...</div>
+    <div id="canvas-container"></div>
+
+    <div id="ui-panel">
+        <div class="tab-container">
+            <button class="tab-btn active" onclick="switchTab('left')">左側貨櫃 (正常方向)</button>
+            <button class="tab-btn" onclick="switchTab('right')">右側貨櫃 (由右至左 ◄)</button>
+        </div>
+
+        <div id="panel-left" class="panel-content active">
+            <div class="input-group">
+                <input type="text" id="text-input-left" value="台灣製造 奔馳全台" placeholder="輸入左側文字...">
+                <input type="color" id="color-left" value="#ffffff" title="選擇左側文字顏色">
+            </div>
+            <div class="control-row">
+                <label>字體大小 <input type="range" id="size-left" min="30" max="150" value="100"></label>
+            </div>
+            <div class="control-row">
+                <label>文字縱高 <input type="range" id="scale-left" min="0.5" max="3.0" step="0.1" value="1.0"></label>
+            </div>
+        </div>
+
+        <div id="panel-right" class="panel-content">
+            <div class="input-group">
+                <input type="text" id="text-input-right" value="白六物流 安全速達" placeholder="輸入右側文字...">
+                <input type="color" id="color-right" value="#ffcc00" title="選擇右側文字顏色">
+            </div>
+            <span class="hint-text">※ 右側文字將自動以「由右至左」逆向排列書寫</span>
+            <div class="control-row">
+                <label>字體大小 <input type="range" id="size-right" min="30" max="150" value="100"></label>
+            </div>
+            <div class="control-row">
+                <label>文字縱高 <input type="range" id="scale-right" min="0.5" max="3.0" step="0.1" value="1.0"></label>
+            </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;">
+        <div class="control-row">
+            <label>卡車車速 <input type="range" id="speed-slider" min="0" max="200" value="100"></label>
+        </div>
+    </div>
+
+    <canvas id="canvas-left" class="hidden-canvas" width="1024" height="512"></canvas>
+    <canvas id="canvas-right" class="hidden-canvas" width="1024" height="512"></canvas>
+    <canvas id="canvas-logo" class="hidden-canvas" width="512" height="256"></canvas>
+    <canvas id="canvas-rear" class="hidden-canvas" width="512" height="608"></canvas> <script>
+        let scene, camera, renderer, controls;
+        let roadMaterial, truckGroup, wheels = [];
+        let texLeft, texRight, texLogo, texRearDoor;
+        
+        let truckSettings = {
+            speed: 0.05,
+            left: { text: "台灣製造 奔馳全台", fontSize: 100, scaleY: 1.0, textColor: "#ffffff" },
+            right: { text: "白六物流 安全速達", fontSize: 100, scaleY: 1.0, textColor: "#ffcc00" }
+        };
+
+        const wheelRotationAxis = new THREE.Vector3(0, 1, 0);
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1c23);
+            scene.fog = new THREE.FogExp2(0x1a1c23, 0.015);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(-16, 7, 18);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // 初始化動態三側紋理
+            texLeft = new THREE.CanvasTexture(document.getElementById('canvas-left'));
+            texRight = new THREE.CanvasTexture(document.getElementById('canvas-right'));
+            texLogo = new THREE.CanvasTexture(document.getElementById('canvas-logo'));
+            texRearDoor = new THREE.CanvasTexture(document.getElementById('canvas-rear'));
+            
+            updateContainerCanvas('left');
+            updateContainerCanvas('right');
+            updateLogoCanvas();
+
+            // 載入車尾圖片並執行「寬度拉滿、高度溢出裁切」的 Canvas 運算
+            const rearImage = new Image();
+            rearImage.crossOrigin = "anonymous";
+            rearImage.src = 'https://raw.githubusercontent.com/kuochili-ops/TWDrugMarket/refs/heads/main/S__38543373.jpg';
+            rearImage.onload = function() {
+                const canvasRear = document.getElementById('canvas-rear');
+                const ctxRear = canvasRear.getContext('2d');
+                
+                // 1. 先用深色底色鋪底（以防萬一）
+                ctxRear.fillStyle = '#2c3e50';
+                ctxRear.fillRect(0, 0, canvasRear.width, canvasRear.height);
+
+                // 2. 核心計算：保持圖片原始縱橫比，並強行將「圖片橫寬」放大到「畫布寬度 (512)」
+                const renderWidth = canvasRear.width; // 512
+                const scaleRatio = renderWidth / rearImage.width; // 計算縮放比例
+                const renderHeight = rearImage.height * scaleRatio; // 依比例放大後的高度
+
+                // 3. 上下置中對齊繪製，超出畫布上下邊界的（高度部分）會被 Canvas 內容自動 Clip 裁切掉！
+                const offsetY = (canvasRear.height - renderHeight) / 2;
+
+                ctxRear.drawImage(rearImage, 0, offsetY, renderWidth, renderHeight);
+                
+                // 4. 通知 Three.js 紋理已更新
+                texRearDoor.needsUpdate = true;
+
+                // 關閉載入提示
+                const loadingEl = document.getElementById('loading');
+                if (loadingEl) {
+                    loadingEl.style.opacity = 0;
+                    setTimeout(() => loadingEl.remove(), 500);
+                }
+            };
+            rearImage.onerror = function() {
+                console.error("車尾貼圖載入失敗，採用備用顏色。");
+                const canvasRear = document.getElementById('canvas-rear');
+                const ctxRear = canvasRear.getContext('2d');
+                ctxRear.fillStyle = '#222222';
+                ctxRear.fillRect(0, 0, canvasRear.width, canvasRear.height);
+                texRearDoor.needsUpdate = true;
+                document.getElementById('loading').remove();
+            };
+
+            createEnvironment();
+            createTruck();
+            initUI();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function updateContainerCanvas(side) {
+            const canvas = document.getElementById(`canvas-${side}`);
+            const ctx = canvas.getContext('2d');
+            const data = truckSettings[side];
+
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#243342';
+            for (let i = 0; i < canvas.width; i += 32) {
+                ctx.fillRect(i, 0, 4, canvas.height);
+            }
+
+            ctx.fillStyle = data.textColor;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 3;
+            ctx.font = `bold ${data.fontSize}px 'PingFang TC', 'Microsoft JhengHei', sans-serif`;
+            ctx.textBaseline = 'middle';
+
+            ctx.save();
+            if (side === 'left') {
+                ctx.textAlign = 'center';
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.scale(1.0, data.scaleY);
+                ctx.fillText(data.text, 0, 0);
+            } else {
+                ctx.textAlign = 'center';
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.scale(1.0, data.scaleY);
+                const reversedText = data.text.split('').reverse().join('');
+                ctx.fillText(reversedText, 0, 0);
+            }
+            ctx.restore();
+
+            if (side === 'left') texLeft.needsUpdate = true;
+            if (side === 'right') texRight.needsUpdate = true;
+        }
+
+        function updateLogoCanvas() {
+            const canvas = document.getElementById('canvas-logo');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `bold 55px 'PingFang TC', sans-serif`;
+            ctx.fillText("𓃥 white6", canvas.width / 2, canvas.height / 2);
+            
+            texLogo.needsUpdate = true;
+        }
+
+        function createEnvironment() {
+            const roadGeometry = new THREE.PlaneGeometry(50, 500);
+            const roadCanvas = document.createElement('canvas');
+            roadCanvas.width = 128; roadCanvas.height = 512;
+            const roadCtx = roadCanvas.getContext('2d');
+            roadCtx.fillStyle = '#333333'; roadCtx.fillRect(0, 0, 128, 512);
+            roadCtx.fillStyle = '#ffffff'; roadCtx.fillRect(62, 50, 4, 100); roadCtx.fillRect(62, 300, 4, 100);
+
+            const roadTex = new THREE.CanvasTexture(roadCanvas);
+            roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+            roadTex.repeat.set(1, 10);
+
+            roadMaterial = new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.8 });
+            const road = new THREE.Mesh(roadGeometry, roadMaterial);
+            road.rotation.x = -Math.PI / 2;
+            road.receiveShadow = true;
+            scene.add(road);
+
+            for(let i = -200; i < 200; i += 40) {
+                if (i === 0) continue;
+                const boxGeo = new THREE.BoxGeometry(1, Math.random() * 5 + 2, 1);
+                const boxMat = new THREE.MeshStandardMaterial({color: 0x3a4f3a});
+                const pL = new THREE.Mesh(boxGeo, boxMat); pL.position.set(-15, boxGeo.parameters.height/2, i); scene.add(pL);
+                const pR = pL.clone(); pR.position.x = 15; scene.add(pR);
+            }
+        }
+
+        function createTruck() {
+            truckGroup = new THREE.Group();
+
+            const containerWidth = 3.2;
+            const containerHeight = 3.8;
+            const containerDepth = 11;
+            
+            // 1. 貨櫃主體
+            const containerGeo = new THREE.BoxGeometry(containerWidth, containerHeight, containerDepth);
+            
+            const sideMaterials = [
+                new THREE.MeshStandardMaterial({ map: texLeft }),   
+                new THREE.MeshStandardMaterial({ map: texRight }),  
+                new THREE.MeshStandardMaterial({ color: 0x34495e }), 
+                new THREE.MeshStandardMaterial({ color: 0x1a252f }), 
+                new THREE.MeshStandardMaterial({ color: 0x2c3e50 }), 
+                new THREE.MeshStandardMaterial({ color: 0x2c3e50 }) // 後面純色底
+            ];
+
+            const truckContainer = new THREE.Mesh(containerGeo, sideMaterials);
+            truckContainer.position.set(0, 2.7, -1);
+            truckContainer.castShadow = true;
+            truckGroup.add(truckContainer);
+
+            // 1b. 添加完美寬度拉滿、高度自動裁切的尾門 PlaneGeometry
+            const doorGeo = new THREE.PlaneGeometry(containerWidth, containerHeight);
+            const doorMat = new THREE.MeshStandardMaterial({ 
+                map: texRearDoor, 
+                roughness: 0.5,
+                polygonOffset: true,
+                polygonOffsetFactor: -1, 
+                polygonOffsetUnits: -1
+            });
+            const rearDoorMesh = new THREE.Mesh(doorGeo, doorMat);
+            rearDoorMesh.rotation.y = Math.PI; 
+            rearDoorMesh.position.set(0, 2.7, -1 - (containerDepth / 2) - 0.005); 
+            rearDoorMesh.castShadow = true;
+            truckGroup.add(rearDoorMesh);
+            
+            // 1c. 裝飾性精緻尾燈組
+            const rearDetailsGroup = new THREE.Group();
+            const brakeLightGeo = new THREE.BoxGeometry(0.5, 0.15, 0.05);
+            const brakeLightMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xcc0000 });
+            const brakeLightL = new THREE.Mesh(brakeLightGeo, brakeLightMat);
+            brakeLightL.position.set(-containerWidth/2 + 0.4, -containerHeight/2 + 0.2, 0);
+            rearDetailsGroup.add(brakeLightL);
+
+            const brakeLightR = new THREE.Mesh(brakeLightGeo, brakeLightMat);
+            brakeLightR.position.set(containerWidth/2 - 0.4, -containerHeight/2 + 0.2, 0);
+            rearDetailsGroup.add(brakeLightR);
+
+            rearDetailsGroup.position.set(0, 2.7, -1 - (containerDepth / 2) - 0.01);
+            rearDetailsGroup.rotation.y = Math.PI;
+            truckGroup.add(rearDetailsGroup);
+
+            // 2. 加大車窗前衛車頭 (Cab)
+            const cabGroup = new THREE.Group();
+            const cabMainGeo = new THREE.BoxGeometry(3.2, 3.5, 3);
+            const cabMainMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.3 });
+            const cabMain = new THREE.Mesh(cabMainGeo, cabMainMat);
+            cabMain.position.set(0, 2.3, 6);
+            cabMain.castShadow = true;
+            cabGroup.add(cabMain);
+
+            const glassGeo = new THREE.BoxGeometry(3.14, 1.4, 0.1); 
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.05, metalness: 0.95 });
+            const glass = new THREE.Mesh(glassGeo, glassMat);
+            glass.position.set(0, 3.2, 7.51); 
+            cabGroup.add(glass);
+
+            const brandGeo = new THREE.PlaneGeometry(2.0, 0.8);
+            const brandMat = new THREE.MeshBasicMaterial({ map: texLogo });
+            const brandMesh = new THREE.Mesh(brandGeo, brandMat);
+            brandMesh.position.set(0, 1.8, 7.52); 
+            cabGroup.add(brandMesh);
+            
+            truckGroup.add(cabGroup);
+
+            // 3. 底盤
+            const chassisGeo = new THREE.BoxGeometry(3.0, 0.4, 14);
+            const chassisMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const chassis = new THREE.Mesh(chassisGeo, chassisMat);
+            chassis.position.set(0, 0.8, 1);
+            truckGroup.add(chassis);
+
+            // 4. 車輪
+            const wheelRadius = 0.7; const wheelDepth = 0.6;
+            const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelDepth, 32);
+            const tireMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 });
+            
+            const rimCanvas = document.createElement('canvas'); rimCanvas.width = 128; rimCanvas.height = 128;
+            const rCtx = rimCanvas.getContext('2d');
+            rCtx.fillStyle = '#cccccc'; rCtx.fillRect(0,0,128,128);
+            rCtx.fillStyle = '#222222'; rCtx.fillRect(60, 10, 8, 108); rCtx.fillRect(10, 60, 108, 8);
+            const rimTex = new THREE.CanvasTexture(rimCanvas);
+            const rimMat = new THREE.MeshStandardMaterial({ map: rimTex, roughness: 0.4, metalness: 0.6 });
+            
+            const wheelPositions = [
+                { x: 1.6, y: 0.7, z: 6 }, { x: -1.6, y: 0.7, z: 6 },
+                { x: 1.6, y: 0.7, z: -2 }, { x: -1.6, y: 0.7, z: -2 },
+                { x: 1.6, y: 0.7, z: -4 }, { x: -1.6, y: 0.7, z: -4 }
+            ];
+
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeo, [tireMat, rimMat, rimMat]);
+                wheel.rotation.z = Math.PI / 2; 
+                wheel.position.set(pos.x, pos.y, pos.z);
+                wheel.castShadow = true;
+                truckGroup.add(wheel);
+                wheels.push(wheel); 
+            });
+
+            scene.add(truckGroup);
+        }
+
+        function initUI() {
+            document.getElementById('text-input-left').addEventListener('input', (e) => {
+                truckSettings.left.text = e.target.value || " ";
+                updateContainerCanvas('left');
+            });
+            document.getElementById('color-left').addEventListener('input', (e) => {
+                truckSettings.left.textColor = e.target.value;
+                updateContainerCanvas('left');
+            });
+            document.getElementById('size-left').addEventListener('input', (e) => {
+                truckSettings.left.fontSize = parseInt(e.target.value);
+                updateContainerCanvas('left');
+            });
+            document.getElementById('scale-left').addEventListener('input', (e) => {
+                truckSettings.left.scaleY = parseFloat(e.target.value);
+                updateContainerCanvas('left');
+            });
+
+            document.getElementById('text-input-right').addEventListener('input', (e) => {
+                truckSettings.right.text = e.target.value || " ";
+                updateContainerCanvas('right');
+            });
+            document.getElementById('color-right').addEventListener('input', (e) => {
+                truckSettings.right.textColor = e.target.value;
+                updateContainerCanvas('right');
+            });
+            document.getElementById('size-right').addEventListener('input', (e) => {
+                truckSettings.right.fontSize = parseInt(e.target.value);
+                updateContainerCanvas('right');
+            });
+            document.getElementById('scale-right').addEventListener('input', (e) => {
+                truckSettings.right.scaleY = parseFloat(e.target.value);
+                updateContainerCanvas('right');
+            });
+
+            document.getElementById('speed-slider').addEventListener('input', (e) => {
+                truckSettings.speed = parseFloat(e.target.value) * 0.0005;
+            });
+        }
+
+        window.switchTab = function(side) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
+            
+            if(side === 'left') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('panel-left').classList.add('active');
+            } else {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('panel-right').classList.add('active');
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (roadMaterial && roadMaterial.map) {
+                roadMaterial.map.offset.y -= truckSettings.speed * 2; 
+            }
+
+            scene.children.forEach(child => {
+                if (child instanceof THREE.Mesh && child.geometry instanceof THREE.BoxGeometry && child !== truckGroup) {
+                    child.position.z += truckSettings.speed * 200; 
+                    if (child.position.z > 150) child.position.z = -250; 
+                }
+            });
+
+            wheels.forEach(wheel => {
+                wheel.rotateOnAxis(wheelRotationAxis, truckSettings.speed * 5);
+            });
+
+            if (truckGroup && truckSettings.speed > 0) {
+                truckGroup.position.y = Math.sin(Date.now() * 0.015) * 0.03;
+                truckGroup.position.z = Math.cos(Date.now() * 0.01) * 0.02; 
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
