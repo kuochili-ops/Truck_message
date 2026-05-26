@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 奔馳貨櫃車模擬器 - 尾門完美裁切版</title>
+    <title>3D 奔馳貨櫃車模擬器 - 旗艦精緻大燈版</title>
     <style>
         * {
             box-sizing: border-box;
@@ -93,7 +93,6 @@
             border-color: #007bff;
         }
         
-        /* 顏色選擇器樣式 */
         input[type="color"] {
             -webkit-appearance: none;
             border: none;
@@ -134,21 +133,8 @@
             margin-top: -4px;
         }
         
-        /* 隱藏用於材質的 Canvas */
         .hidden-canvas {
             display: none;
-        }
-        
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 18px;
-            pointer-events: none;
-            z-index: 100;
-            transition: opacity 0.5s;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -156,7 +142,6 @@
 </head>
 <body>
 
-    <div id="loading">正在下載並等比例裁切尾門貼圖...</div>
     <div id="canvas-container"></div>
 
     <div id="ui-panel">
@@ -201,9 +186,11 @@
     <canvas id="canvas-left" class="hidden-canvas" width="1024" height="512"></canvas>
     <canvas id="canvas-right" class="hidden-canvas" width="1024" height="512"></canvas>
     <canvas id="canvas-logo" class="hidden-canvas" width="512" height="256"></canvas>
-    <canvas id="canvas-rear" class="hidden-canvas" width="512" height="608"></canvas> <script>
+    <canvas id="canvas-rear" class="hidden-canvas" width="512" height="608"></canvas>
+
+    <script>
         let scene, camera, renderer, controls;
-        let roadMaterial, truckGroup, wheels = [];
+        let roadMaterial, truckGroup, wheelPivots = [];
         let texLeft, texRight, texLogo, texRearDoor;
         
         let truckSettings = {
@@ -211,8 +198,6 @@
             left: { text: "台灣製造 奔馳全台", fontSize: 100, scaleY: 1.0, textColor: "#ffffff" },
             right: { text: "白六物流 安全速達", fontSize: 100, scaleY: 1.0, textColor: "#ffcc00" }
         };
-
-        const wheelRotationAxis = new THREE.Vector3(0, 1, 0);
 
         init();
         animate();
@@ -236,15 +221,15 @@
             controls.dampingFactor = 0.05;
             controls.maxPolarAngle = Math.PI / 2 - 0.05;
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            // 環境光與主日光
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
             scene.add(ambientLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
             dirLight.position.set(20, 40, 20);
             dirLight.castShadow = true;
             scene.add(dirLight);
 
-            // 初始化動態三側紋理
             texLeft = new THREE.CanvasTexture(document.getElementById('canvas-left'));
             texRight = new THREE.CanvasTexture(document.getElementById('canvas-right'));
             texLogo = new THREE.CanvasTexture(document.getElementById('canvas-logo'));
@@ -253,48 +238,7 @@
             updateContainerCanvas('left');
             updateContainerCanvas('right');
             updateLogoCanvas();
-
-            // 載入車尾圖片並執行「寬度拉滿、高度溢出裁切」的 Canvas 運算
-            const rearImage = new Image();
-            rearImage.crossOrigin = "anonymous";
-            rearImage.src = 'https://raw.githubusercontent.com/kuochili-ops/TWDrugMarket/refs/heads/main/S__38543373.jpg';
-            rearImage.onload = function() {
-                const canvasRear = document.getElementById('canvas-rear');
-                const ctxRear = canvasRear.getContext('2d');
-                
-                // 1. 先用深色底色鋪底（以防萬一）
-                ctxRear.fillStyle = '#2c3e50';
-                ctxRear.fillRect(0, 0, canvasRear.width, canvasRear.height);
-
-                // 2. 核心計算：保持圖片原始縱橫比，並強行將「圖片橫寬」放大到「畫布寬度 (512)」
-                const renderWidth = canvasRear.width; // 512
-                const scaleRatio = renderWidth / rearImage.width; // 計算縮放比例
-                const renderHeight = rearImage.height * scaleRatio; // 依比例放大後的高度
-
-                // 3. 上下置中對齊繪製，超出畫布上下邊界的（高度部分）會被 Canvas 內容自動 Clip 裁切掉！
-                const offsetY = (canvasRear.height - renderHeight) / 2;
-
-                ctxRear.drawImage(rearImage, 0, offsetY, renderWidth, renderHeight);
-                
-                // 4. 通知 Three.js 紋理已更新
-                texRearDoor.needsUpdate = true;
-
-                // 關閉載入提示
-                const loadingEl = document.getElementById('loading');
-                if (loadingEl) {
-                    loadingEl.style.opacity = 0;
-                    setTimeout(() => loadingEl.remove(), 500);
-                }
-            };
-            rearImage.onerror = function() {
-                console.error("車尾貼圖載入失敗，採用備用顏色。");
-                const canvasRear = document.getElementById('canvas-rear');
-                const ctxRear = canvasRear.getContext('2d');
-                ctxRear.fillStyle = '#222222';
-                ctxRear.fillRect(0, 0, canvasRear.width, canvasRear.height);
-                texRearDoor.needsUpdate = true;
-                document.getElementById('loading').remove();
-            };
+            updateRearCanvas(); 
 
             createEnvironment();
             createTruck();
@@ -352,9 +296,50 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.font = `bold 55px 'PingFang TC', sans-serif`;
-            ctx.fillText("𓃥 white6", canvas.width / 2, canvas.height / 2);
+            ctx.fillText("white6", canvas.width / 2, canvas.height / 2);
             
             texLogo.needsUpdate = true;
+        }
+
+        function updateRearCanvas() {
+            const canvas = document.getElementById('canvas-rear');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#1e272e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#111111';
+            ctx.fillRect(canvas.width / 2 - 4, 0, 8, canvas.height); 
+            
+            ctx.fillStyle = '#141d26';
+            for (let x = 20; x < canvas.width; x += 40) {
+                if (Math.abs(x - canvas.width/2) < 20) continue;
+                ctx.fillRect(x, 10, 15, canvas.height - 20);
+            }
+
+            const stripeY = canvas.height - 90;
+            const stripeHeight = 25;
+            for (let x = 10; x < canvas.width - 10; x += 30) {
+                ctx.fillStyle = (x / 30 % 2 === 0) ? '#f1c40f' : '#e74c3c';
+                ctx.fillRect(x, stripeY, 30, stripeHeight);
+            }
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = "bold 32px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("white6 LOGISTICS", canvas.width / 2, 120);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(canvas.width / 2 - 70, canvas.height - 50, 140, 40);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#333333';
+            ctx.strokeRect(canvas.width / 2 - 70, canvas.height - 50, 140, 40);
+            
+            ctx.fillStyle = '#111111';
+            ctx.font = "bold 20px 'Courier New'";
+            ctx.fillText("W6-2026", canvas.width / 2, canvas.height - 23);
+
+            texRearDoor.needsUpdate = true;
         }
 
         function createEnvironment() {
@@ -393,22 +378,20 @@
             
             // 1. 貨櫃主體
             const containerGeo = new THREE.BoxGeometry(containerWidth, containerHeight, containerDepth);
-            
             const sideMaterials = [
                 new THREE.MeshStandardMaterial({ map: texLeft }),   
                 new THREE.MeshStandardMaterial({ map: texRight }),  
                 new THREE.MeshStandardMaterial({ color: 0x34495e }), 
                 new THREE.MeshStandardMaterial({ color: 0x1a252f }), 
                 new THREE.MeshStandardMaterial({ color: 0x2c3e50 }), 
-                new THREE.MeshStandardMaterial({ color: 0x2c3e50 }) // 後面純色底
+                new THREE.MeshStandardMaterial({ color: 0x2c3e50 }) 
             ];
-
             const truckContainer = new THREE.Mesh(containerGeo, sideMaterials);
             truckContainer.position.set(0, 2.7, -1);
             truckContainer.castShadow = true;
             truckGroup.add(truckContainer);
 
-            // 1b. 添加完美寬度拉滿、高度自動裁切的尾門 PlaneGeometry
+            // 1b. 車尾滿版平面
             const doorGeo = new THREE.PlaneGeometry(containerWidth, containerHeight);
             const doorMat = new THREE.MeshStandardMaterial({ 
                 map: texRearDoor, 
@@ -422,55 +405,194 @@
             rearDoorMesh.position.set(0, 2.7, -1 - (containerDepth / 2) - 0.005); 
             rearDoorMesh.castShadow = true;
             truckGroup.add(rearDoorMesh);
-            
-            // 1c. 裝飾性精緻尾燈組
-            const rearDetailsGroup = new THREE.Group();
-            const brakeLightGeo = new THREE.BoxGeometry(0.5, 0.15, 0.05);
-            const brakeLightMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xcc0000 });
-            const brakeLightL = new THREE.Mesh(brakeLightGeo, brakeLightMat);
-            brakeLightL.position.set(-containerWidth/2 + 0.4, -containerHeight/2 + 0.2, 0);
-            rearDetailsGroup.add(brakeLightL);
 
-            const brakeLightR = new THREE.Mesh(brakeLightGeo, brakeLightMat);
-            brakeLightR.position.set(containerWidth/2 - 0.4, -containerHeight/2 + 0.2, 0);
-            rearDetailsGroup.add(brakeLightR);
-
-            rearDetailsGroup.position.set(0, 2.7, -1 - (containerDepth / 2) - 0.01);
-            rearDetailsGroup.rotation.y = Math.PI;
-            truckGroup.add(rearDetailsGroup);
-
-            // 2. 加大車窗前衛車頭 (Cab)
+            // ==================== 2. 精緻化車頭 (Cab) ====================
             const cabGroup = new THREE.Group();
+            const cabColor = 0xe74c3c; 
+            
+            // 車頭主體
             const cabMainGeo = new THREE.BoxGeometry(3.2, 3.5, 3);
-            const cabMainMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.3 });
+            const cabMainMat = new THREE.MeshStandardMaterial({ color: cabColor, roughness: 0.3 });
             const cabMain = new THREE.Mesh(cabMainGeo, cabMainMat);
             cabMain.position.set(0, 2.3, 6);
             cabMain.castShadow = true;
             cabGroup.add(cabMain);
 
-            const glassGeo = new THREE.BoxGeometry(3.14, 1.4, 0.1); 
+            // 前擋風大玻璃
+            const glassGeo = new THREE.BoxGeometry(3.14, 1.3, 0.1); 
             const glassMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.05, metalness: 0.95 });
             const glass = new THREE.Mesh(glassGeo, glassMat);
             glass.position.set(0, 3.2, 7.51); 
             cabGroup.add(glass);
 
-            const brandGeo = new THREE.PlaneGeometry(2.0, 0.8);
+            // 側門與立體側窗結構
+            const doorPanelGeo = new THREE.BoxGeometry(0.04, 2.4, 1.7);
+            const doorPanelMat = new THREE.MeshStandardMaterial({ color: 0xd63031, roughness: 0.3 });
+            const sideGlassGeo = new THREE.BoxGeometry(0.05, 1.1, 1.1);
+            const sideGlassMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.05, metalness: 0.9 });
+
+            // 左側車門與側窗
+            const sideDoorL = new THREE.Mesh(doorPanelGeo, doorPanelMat);
+            sideDoorL.position.set(-1.6, 2.0, 6.0); 
+            const sideGlassL = new THREE.Mesh(sideGlassGeo, sideGlassMat);
+            sideGlassL.position.set(-1.61, 3.2, 6.2); 
+            cabGroup.add(sideDoorL, sideGlassL);
+
+            // 右側車門與側窗
+            const sideDoorR = new THREE.Mesh(doorPanelGeo, doorPanelMat);
+            sideDoorR.position.set(1.6, 2.0, 6.0);
+            const sideGlassR = new THREE.Mesh(sideGlassGeo, sideGlassMat);
+            sideGlassR.position.set(1.61, 3.2, 6.2); 
+            cabGroup.add(sideDoorR, sideGlassR);
+
+            // 車頭品牌面板 (white6)
+            const brandGeo = new THREE.PlaneGeometry(2.0, 0.6);
             const brandMat = new THREE.MeshBasicMaterial({ map: texLogo });
             const brandMesh = new THREE.Mesh(brandGeo, brandMat);
-            brandMesh.position.set(0, 1.8, 7.52); 
+            brandMesh.position.set(0, 1.9, 7.52); 
             cabGroup.add(brandMesh);
+
+            // 【優化：打造如參考圖般的電鍍銀色水箱護罩】
+            const grilleMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.9, roughness: 0.15 });
+            const grillPositionsY = [1.5, 1.35, 1.2, 1.05];
+            grillPositionsY.forEach(y => {
+                const gGeo = new THREE.BoxGeometry(2.2, 0.08, 0.08);
+                const gMesh = new THREE.Mesh(gGeo, grilleMat);
+                gMesh.position.set(0, y, 7.52);
+                cabGroup.add(gMesh);
+            });
+
+            // 車頂遮陽板
+            const visorGeo = new THREE.BoxGeometry(3.26, 0.25, 0.4);
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 4.0, 7.4);
+            cabGroup.add(visor);
+
+            // ==================== 【重磅全新打造：高仿真立體科技感大燈組】 ====================
+            const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // 絕對亮白自發光
+            const darkFrameMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+
+            function createModernHeadlight(isLeft) {
+                const lightGroup = new THREE.Group();
+                const sideSign = isLeft ? -1 : 1;
+
+                // 1. 大燈黑底基座
+                const baseGeo = new THREE.BoxGeometry(0.45, 0.3, 0.1);
+                const base = new THREE.Mesh(baseGeo, darkFrameMat);
+                lightGroup.add(base);
+
+                // 2. 亮白色 LED 導光條 (橫向與縱向組合成 L 型外觀)
+                const ledHGeo = new THREE.BoxGeometry(0.35, 0.04, 0.04);
+                const ledH = new THREE.Mesh(ledHGeo, glowMat);
+                ledH.position.set(0, -0.1, 0.04);
+                lightGroup.add(ledH);
+
+                const ledVGeo = new THREE.BoxGeometry(0.04, 0.2, 0.04);
+                const ledV = new THREE.Mesh(ledVGeo, glowMat);
+                ledV.position.set(0.16 * sideSign, 0.02, 0.04);
+                lightGroup.add(ledV);
+
+                // 3. 核心圓形魚眼大燈光源
+                const bulbGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.04, 16);
+                const bulb = new THREE.Mesh(bulbGeo, glowMat);
+                bulb.rotation.x = Math.PI / 2;
+                bulb.position.set(-0.06 * sideSign, 0.03, 0.04);
+                lightGroup.add(bulb);
+
+                // 4. 前橘色方向燈
+                const signalGeo = new THREE.BoxGeometry(0.06, 0.22, 0.04);
+                const signalMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff6600, emissiveIntensity: 2.0 });
+                const signal = new THREE.Mesh(signalGeo, signalMat);
+                signal.position.set(-0.18 * sideSign, 0, 0.04);
+                lightGroup.add(signal);
+
+                lightGroup.position.set(1.15 * sideSign, 0.85, 7.5);
+                return lightGroup;
+            }
+
+            // 將左、右實體精緻大燈加入車頭
+            cabGroup.add(createModernHeadlight(true));  // 左側
+            cabGroup.add(createModernHeadlight(false)); // 右側
+
+            // 負責往馬路上打光暈的實體動態投射燈 (SpotLight)
+            const leftSpotLight = new THREE.SpotLight(0xffffff, 5, 40, Math.PI / 4, 0.5, 0.3);
+            leftSpotLight.position.set(-1.15, 0.85, 7.6);
+            leftSpotLight.castShadow = true;
             
+            const rightSpotLight = new THREE.SpotLight(0xffffff, 5, 40, Math.PI / 4, 0.5, 0.3);
+            rightSpotLight.position.set(1.15, 0.85, 7.6);
+            rightSpotLight.castShadow = true;
+
+            const lightTargetL = new THREE.Object3D(); lightTargetL.position.set(-1.15, 0, 20);
+            const lightTargetR = new THREE.Object3D(); lightTargetR.position.set(1.15, 0, 20);
+            cabGroup.add(lightTargetL, lightTargetR);
+            
+            leftSpotLight.target = lightTargetL;
+            rightSpotLight.target = lightTargetR;
+            cabGroup.add(leftSpotLight, rightSpotLight);
+
+            // 下方保險桿圓形霧燈
+            const fogGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16);
+            const fogL = new THREE.Mesh(fogGeo, glowMat);
+            fogL.rotation.x = Math.PI / 2;
+            fogL.position.set(-1.15, 0.55, 7.55);
+            const fogR = fogL.clone();
+            fogR.position.x = 1.15;
+            cabGroup.add(fogL, fogR);
+            // ======================================================================
+
+            // 黑色前保險桿與前車牌
+            const bumperGeo = new THREE.BoxGeometry(3.22, 0.4, 0.2);
+            const bumperMat = new THREE.MeshStandardMaterial({ color: 0x252525, roughness: 0.7 });
+            const bumper = new THREE.Mesh(bumperGeo, bumperMat);
+            bumper.position.set(0, 0.5, 7.45); 
+            cabGroup.add(bumper);
+
+            const plateGeo = new THREE.BoxGeometry(0.8, 0.2, 0.02);
+            const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+            const plate = new THREE.Mesh(plateGeo, plateMat);
+            plate.position.set(0, 0.45, 7.56);
+            cabGroup.add(plate);
+
+            // 左右後視鏡
+            const mirrorGroupL = new THREE.Group();
+            const mirrorFrameGeo = new THREE.BoxGeometry(0.18, 0.7, 0.3);
+            const mirrorFrameMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.6 });
+            const mirrorFrame = new THREE.Mesh(mirrorFrameGeo, mirrorFrameMat);
+            mirrorFrame.position.set(0, 0, 0);
+            
+            const mirrorGlassGeo = new THREE.BoxGeometry(0.02, 0.64, 0.26);
+            const mirrorGlassMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.1, metalness: 0.9 });
+            const mirrorGlass = new THREE.Mesh(mirrorGlassGeo, mirrorGlassMat);
+            mirrorGlass.position.set(-0.09, 0, 0); 
+            mirrorGroupL.add(mirrorFrame, mirrorGlass);
+
+            const armGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4);
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const arm = new THREE.Mesh(armGeo, armMat);
+            arm.rotation.z = Math.PI / 4;
+            arm.position.set(0.15, 0.2, 0.1);
+            mirrorGroupL.add(arm);
+            mirrorGroupL.position.set(-1.75, 3.2, 7.2); 
+            
+            const mirrorGroupR = mirrorGroupL.clone();
+            mirrorGroupR.position.x = 1.75;
+            mirrorGroupR.rotation.y = Math.PI; 
+            
+            cabGroup.add(mirrorGroupL, mirrorGroupR);
             truckGroup.add(cabGroup);
 
-            // 3. 底盤
+            // ==================== 3. 底盤結構 ====================
             const chassisGeo = new THREE.BoxGeometry(3.0, 0.4, 14);
             const chassisMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
             const chassis = new THREE.Mesh(chassisGeo, chassisMat);
             chassis.position.set(0, 0.8, 1);
             truckGroup.add(chassis);
 
-            // 4. 車輪
+            // ==================== 4. 【徹底修復：完美導正的輪胎結構】 ====================
             const wheelRadius = 0.7; const wheelDepth = 0.6;
+            // 建立標準的圓柱幾何體（未旋轉前是站立管狀）
             const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelDepth, 32);
             const tireMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 });
             
@@ -488,12 +610,19 @@
             ];
 
             wheelPositions.forEach(pos => {
-                const wheel = new THREE.Mesh(wheelGeo, [tireMat, rimMat, rimMat]);
-                wheel.rotation.z = Math.PI / 2; 
-                wheel.position.set(pos.x, pos.y, pos.z);
-                wheel.castShadow = true;
-                truckGroup.add(wheel);
-                wheels.push(wheel); 
+                // 為了避免 rotateOnAxis 與世界座標衝突，我們建立一個獨立的樞紐轉軸 Group
+                const wheelPivot = new THREE.Group();
+                wheelPivot.position.set(pos.x, pos.y, pos.z);
+
+                const wheelMesh = new THREE.Mesh(wheelGeo, [tireMat, rimMat, rimMat]);
+                // 在 Pivot 內部將圓柱側翻 90 度，讓它貼在正確車側上
+                wheelMesh.rotation.z = Math.PI / 2;
+                
+                wheelPivot.add(wheelMesh);
+                truckGroup.add(wheelPivot);
+                
+                // 存入陣列，在動畫環節中直接沿著 X 軸向前滾動
+                wheelPivots.push(wheelPivot);
             });
 
             scene.add(truckGroup);
@@ -572,8 +701,10 @@
                 }
             });
 
-            wheels.forEach(wheel => {
-                wheel.rotateOnAxis(wheelRotationAxis, truckSettings.speed * 5);
+            // 【優化：乾淨、垂直不歪斜的順向滾動】
+            // 透過直接減少其 X 軸弧度（-），輪胎便能平穩、順暢地跟著卡車前進方向一直往前滾
+            wheelPivots.forEach(pivot => {
+                pivot.rotation.x -= truckSettings.speed * 5;
             });
 
             if (truckGroup && truckSettings.speed > 0) {
