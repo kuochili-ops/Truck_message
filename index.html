@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 奔馳貨櫃車模擬器 - 銘板字體完美視覺版</title>
+    <title>3D 奔馳貨櫃車模擬器 - 保險桿平整貼合版</title>
     <style>
         * {
             box-sizing: border-box;
@@ -21,11 +21,17 @@
             display: block;
         }
         
-        /* 雙側操控分頁標籤 */
+        /* 雙側操控分頁標籤與控制列 */
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
         .tab-container {
             display: flex;
             gap: 5px;
-            margin-bottom: 5px;
+            flex: 1;
         }
         .tab-btn {
             flex: 1;
@@ -43,6 +49,22 @@
             background: #007bff;
             color: #fff;
             border-color: #007bff;
+        }
+
+        /* 收合按鈕樣式 */
+        .toggle-btn {
+            padding: 8px 12px;
+            background: #333;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.3s;
+            white-space: nowrap;
+        }
+        .toggle-btn:hover {
+            background: #444;
         }
 
         /* 操控介面面板 */
@@ -63,6 +85,26 @@
             flex-direction: column;
             gap: 10px;
             z-index: 10;
+            max-height: 400px;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s;
+        }
+        
+        #ui-panel.collapsed {
+            max-height: 70px;
+            padding-bottom: 5px;
+        }
+
+        .panel-body-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.3s;
+            opacity: 1;
+        }
+        #ui-panel.collapsed .panel-body-wrapper {
+            opacity: 0;
+            pointer-events: none;
         }
         
         .panel-content {
@@ -145,41 +187,46 @@
     <div id="canvas-container"></div>
 
     <div id="ui-panel">
-        <div class="tab-container">
-            <button class="tab-btn active" onclick="switchTab('left')">左側貨櫃 (正常方向)</button>
-            <button class="tab-btn" onclick="switchTab('right')">右側貨櫃 (由右至左 ◄)</button>
+        <div class="panel-header">
+            <div class="tab-container">
+                <button class="tab-btn active" onclick="switchTab('left')">左側</button>
+                <button class="tab-btn" onclick="switchTab('right')">右側</button>
+            </div>
+            <button class="toggle-btn" id="toggle-panel-btn" onclick="togglePanel()">收合 ▲</button>
         </div>
 
-        <div id="panel-left" class="panel-content active">
-            <div class="input-group">
-                <input type="text" id="text-input-left" value="台灣製造 奔馳全台" placeholder="輸入左側文字...">
-                <input type="color" id="color-left" value="#ffffff" title="選擇左側文字顏色">
+        <div class="panel-body-wrapper">
+            <div id="panel-left" class="panel-content active">
+                <div class="input-group">
+                    <input type="text" id="text-input-left" value="台灣製造 奔馳全台" placeholder="輸入左側文字...">
+                    <input type="color" id="color-left" value="#ffffff" title="選擇左側文字顏色">
+                </div>
+                <div class="control-row">
+                    <label>字體大小 <input type="range" id="size-left" min="30" max="150" value="100"></label>
+                </div>
+                <div class="control-row">
+                    <label>文字縱高 <input type="range" id="scale-left" min="0.5" max="3.0" step="0.1" value="1.0"></label>
+                </div>
             </div>
-            <div class="control-row">
-                <label>字體大小 <input type="range" id="size-left" min="30" max="150" value="100"></label>
-            </div>
-            <div class="control-row">
-                <label>文字縱高 <input type="range" id="scale-left" min="0.5" max="3.0" step="0.1" value="1.0"></label>
-            </div>
-        </div>
 
-        <div id="panel-right" class="panel-content">
-            <div class="input-group">
-                <input type="text" id="text-input-right" value="白六物流 安全速達" placeholder="輸入右側文字...">
-                <input type="color" id="color-right" value="#ffcc00" title="選擇右側文字顏色">
+            <div id="panel-right" class="panel-content">
+                <div class="input-group">
+                    <input type="text" id="text-input-right" value="白六物流 安全速達" placeholder="輸入右側文字...">
+                    <input type="color" id="color-right" value="#ffcc00" title="選擇右側文字顏色">
+                </div>
+                <span class="hint-text">※ 右側文字將自動以「由右至左」逆向排列書寫</span>
+                <div class="control-row">
+                    <label>字體大小 <input type="range" id="size-right" min="30" max="150" value="100"></label>
+                </div>
+                <div class="control-row">
+                    <label>文字縱高 <input type="range" id="scale-right" min="0.5" max="3.0" step="0.1" value="1.0"></label>
+                </div>
             </div>
-            <span class="hint-text">※ 右側文字將自動以「由右至左」逆向排列書寫</span>
-            <div class="control-row">
-                <label>字體大小 <input type="range" id="size-right" min="30" max="150" value="100"></label>
-            </div>
-            <div class="control-row">
-                <label>文字縱高 <input type="range" id="scale-right" min="0.5" max="3.0" step="0.1" value="1.0"></label>
-            </div>
-        </div>
 
-        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;">
-        <div class="control-row">
-            <label>卡車車速 <input type="range" id="speed-slider" min="0" max="200" value="100"></label>
+            <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;">
+            <div class="control-row">
+                <label>卡車車速 <input type="range" id="speed-slider" min="0" max="200" value="100"></label>
+            </div>
         </div>
     </div>
 
@@ -246,6 +293,19 @@
             window.addEventListener('resize', onWindowResize);
         }
 
+        window.togglePanel = function() {
+            const panel = document.getElementById('ui-panel');
+            const btn = document.getElementById('toggle-panel-btn');
+            
+            if (panel.classList.contains('collapsed')) {
+                panel.classList.remove('collapsed');
+                btn.innerText = "收合 ▲";
+            } else {
+                panel.classList.add('collapsed');
+                btn.innerText = "展開 ▼";
+            }
+        }
+
         function updateContainerCanvas(side) {
             const canvas = document.getElementById(`canvas-${side}`);
             const ctx = canvas.getContext('2d');
@@ -285,7 +345,6 @@
             if (side === 'right') texRight.needsUpdate = true;
         }
 
-        // 【修正】確保大字型不被切字的 Logo Canvas 繪製邏輯
         function updateLogoCanvas() {
             const canvas = document.getElementById('canvas-logo');
             const ctx = canvas.getContext('2d');
@@ -295,11 +354,7 @@
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            
-            // 保持 110px 大字體
             ctx.font = `bold 110px 'PingFang TC', 'Segoe UI Historic', 'Apple Color Emoji', sans-serif`;
-            
-            // 使用 canvas 的 maxWidth 參數 (canvas.width - 80)，限制最大繪製寬度，若超出則自動完美擠壓縮放，絕不切字！
             ctx.fillText("𓃥 White6", canvas.width / 2, canvas.height / 2, canvas.width - 80);
             
             texLogo.needsUpdate = true;
@@ -380,7 +435,6 @@
             const containerHeight = 3.8;
             const containerDepth = 11;
             
-            // 1. 貨櫃主體
             const containerGeo = new THREE.BoxGeometry(containerWidth, containerHeight, containerDepth);
             const sideMaterials = [
                 new THREE.MeshStandardMaterial({ map: texLeft }),   
@@ -395,7 +449,6 @@
             truckContainer.castShadow = true;
             truckGroup.add(truckContainer);
 
-            // 1b. 車尾平面
             const doorGeo = new THREE.PlaneGeometry(containerWidth, containerHeight);
             const doorMat = new THREE.MeshStandardMaterial({ 
                 map: texRearDoor, 
@@ -410,11 +463,9 @@
             rearDoorMesh.castShadow = true;
             truckGroup.add(rearDoorMesh);
 
-            // ==================== 2. 車頭 (Cab) ====================
             const cabGroup = new THREE.Group();
             const cabColor = 0xe74c3c; 
             
-            // 車頭主體
             const cabMainGeo = new THREE.BoxGeometry(3.2, 3.5, 3);
             const cabMainMat = new THREE.MeshStandardMaterial({ color: cabColor, roughness: 0.3 });
             const cabMain = new THREE.Mesh(cabMainGeo, cabMainMat);
@@ -422,14 +473,12 @@
             cabMain.castShadow = true;
             cabGroup.add(cabMain);
 
-            // 前擋風玻璃
             const glassGeo = new THREE.BoxGeometry(3.14, 1.3, 0.1); 
             const glassMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.05, metalness: 0.95 });
             const glass = new THREE.Mesh(glassGeo, glassMat);
             glass.position.set(0, 3.2, 7.51); 
             cabGroup.add(glass);
 
-            // 側門與側窗
             const doorPanelGeo = new THREE.BoxGeometry(0.04, 2.4, 1.7);
             const doorPanelMat = new THREE.MeshStandardMaterial({ color: 0xd63031, roughness: 0.3 });
             const sideGlassGeo = new THREE.BoxGeometry(0.05, 1.1, 1.1);
@@ -447,14 +496,12 @@
             sideGlassR.position.set(1.61, 3.2, 6.2); 
             cabGroup.add(sideDoorR, sideGlassR);
 
-            // 【修正】微調銘板網格 (Brand Mesh) 幾何寬度至 2.4，配合 Canvas 完美展現不切字
             const brandGeo = new THREE.PlaneGeometry(2.4, 0.6);
             const brandMat = new THREE.MeshBasicMaterial({ map: texLogo });
             const brandMesh = new THREE.Mesh(brandGeo, brandMat);
             brandMesh.position.set(0, 1.9, 7.52); 
             cabGroup.add(brandMesh);
 
-            // 水箱護罩
             const grilleMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.9, roughness: 0.15 });
             const grillPositionsY = [1.5, 1.35, 1.2, 1.05];
             grillPositionsY.forEach(y => {
@@ -464,14 +511,12 @@
                 cabGroup.add(gMesh);
             });
 
-            // 車頂遮陽板
             const visorGeo = new THREE.BoxGeometry(3.26, 0.25, 0.4);
             const visorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
             const visor = new THREE.Mesh(visorGeo, visorMat);
             visor.position.set(0, 4.0, 7.4);
             cabGroup.add(visor);
 
-            // 霸氣大車燈結構
             const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff }); 
             const darkFrameMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
 
@@ -512,7 +557,6 @@
             cabGroup.add(createGiantHeadlight(true));  
             cabGroup.add(createGiantHeadlight(false)); 
 
-            // 投射光源
             const leftSpotLight = new THREE.SpotLight(0xffffff, 5, 40, Math.PI / 4, 0.5, 0.3);
             leftSpotLight.position.set(-1.22, 0.82, 7.6);
             leftSpotLight.castShadow = true;
@@ -529,7 +573,6 @@
             rightSpotLight.target = lightTargetR;
             cabGroup.add(leftSpotLight, rightSpotLight);
 
-            // 保險桿圓形霧燈
             const fogGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.04, 16);
             const fogL = new THREE.Mesh(fogGeo, glowMat);
             fogL.rotation.x = Math.PI / 2;
@@ -538,20 +581,21 @@
             fogR.position.x = 1.22;
             cabGroup.add(fogL, fogR);
 
-            // 保險桿與車牌
+            // ==================== 【修正：再次內縮 2/3 距離】 ====================
+            // 將保險桿從 7.38 再往內推至 7.23，緊密貼合車頭下緣
             const bumperGeo = new THREE.BoxGeometry(3.22, 0.4, 0.2);
             const bumperMat = new THREE.MeshStandardMaterial({ color: 0x252525, roughness: 0.7 });
             const bumper = new THREE.Mesh(bumperGeo, bumperMat);
-            bumper.position.set(0, 0.5, 7.45); 
+            bumper.position.set(0, 0.5, 7.23); 
             cabGroup.add(bumper);
 
+            // 車牌同步從 7.49 再內縮至 7.34，與保險桿維持完美相對距離
             const plateGeo = new THREE.BoxGeometry(0.8, 0.2, 0.02);
             const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
             const plate = new THREE.Mesh(plateGeo, plateMat);
-            plate.position.set(0, 0.45, 7.56);
+            plate.position.set(0, 0.45, 7.34);
             cabGroup.add(plate);
 
-            // 後視鏡
             const mirrorGroupL = new THREE.Group();
             const mirrorFrameGeo = new THREE.BoxGeometry(0.18, 0.7, 0.3);
             const mirrorFrameMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.6 });
@@ -579,14 +623,12 @@
             cabGroup.add(mirrorGroupL, mirrorGroupR);
             truckGroup.add(cabGroup);
 
-            // ==================== 3. 底盤結構 ====================
             const chassisGeo = new THREE.BoxGeometry(3.0, 0.4, 14);
             const chassisMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
             const chassis = new THREE.Mesh(chassisGeo, chassisMat);
             chassis.position.set(0, 0.8, 1);
             truckGroup.add(chassis);
 
-            // ==================== 4. 車輪結構 ====================
             const wheelRadius = 0.7; const wheelDepth = 0.6;
             const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelDepth, 32);
             const tireMat = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9 });
